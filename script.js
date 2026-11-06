@@ -33,6 +33,8 @@ const GERICHTE = ["Rind", "Fisch", "Vegetarisch", "Kindermenü"];
 
 const STORAGE_KEY = "versiegelte-einladung-v2";
 const LIST_KEY = "hochzeit-gaesteliste-v1";
+const SHEET_URL =
+  "https://script.google.com/macros/s/AKfycbwT_rkA-9GpEWa6Y0HPDVwczlcZxswO3_sJdW2Mt2BdJzUISm-V7jjaVsCDBfo72j8F3w/exec";
 
 const QUESTIONS = [
   {
@@ -59,11 +61,6 @@ const QUESTIONS = [
         value: "weinen",
         label: "Der, der das Brautpaar zum Weinen bringt",
         feedback: "Das schaffen die beiden schon allein. Du darfst trotzdem mitweinen.",
-      },
-      {
-        value: "mitternacht",
-        label: "Der, der um Mitternacht noch ein Lied bestellt",
-        feedback: "Um Mitternacht bestellst du noch ein Lied. Der DJ bleibt wach, versprochen.",
       },
     ],
   },
@@ -109,7 +106,7 @@ const QUESTIONS = [
       2: "Eine Beilage reicht dir. Wir legen trotzdem nach.",
       3: "Du kommst wegen uns. Das Essen ist Beiwerk.",
       4: "Ein Teller, in Ruhe. Sehr erwachsen.",
-      5: "Du freust dich normal. Das Buffet auch.",
+      5: "Du freust dich normal. Das Essen auch.",
       6: "Der Hunger ist angekommen.",
       7: "Du denkst schon jetzt an den zweiten Gang.",
       8: "Das Menü ist der Hauptakt.",
@@ -642,7 +639,7 @@ function applyFeedback(text, variant, animate) {
   const visible = el.classList.contains("is-on");
   if (visible && !animate && sameText && (!variant || el.classList.contains(variant))) return;
 
-  if (!visible || animate) {
+  if (!visible) {
     el.className = "feedback";
     void el.offsetWidth;
   }
@@ -860,6 +857,44 @@ function saveGuest() {
   localStorage.setItem(LIST_KEY, JSON.stringify(list));
 }
 
+function answerText(key) {
+  const question = QUESTIONS.find((item) => item.key === key);
+  if (!question) return "";
+  const value = state.answers[key];
+  if (question.type === "choice") {
+    const option = question.options.find((item) => item.value === value);
+    return option ? option.label : "";
+  }
+  if (question.type === "scale") {
+    const line = question.lines[value] || "";
+    return line ? `${value} — ${line}` : String(value);
+  }
+  return String(value || "").trim();
+}
+
+function sendAnswers() {
+  const payload = {
+    gast: answerText("guest"),
+    outfit: answerText("color"),
+    traenen: answerText("tears"),
+    essen: answerText("food"),
+    wein: answerText("wine"),
+    tanz: answerText("dance"),
+    antrag: answerText("proposal"),
+    datum: answerText("when"),
+  };
+  try {
+    fetch(SHEET_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    /* Die Karte erscheint auch, wenn die Tabelle gerade nicht erreichbar ist. */
+  }
+}
+
 function persist() {
   try {
     saveGuest();
@@ -913,6 +948,7 @@ function attemptNext() {
   }
   if (state.step === QUESTIONS.length) {
     persist();
+    sendAnswers();
     go(finaleStep(), true);
     return;
   }
